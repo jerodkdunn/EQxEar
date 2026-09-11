@@ -57,9 +57,11 @@ jobs:
           (destination / 'PKGBUILD').write_text(recipe)
           PY
           useradd -m builder
-          runuser -u builder -- sh -c 'cd "$1/packaging/arch" && makepkg --printsrcinfo' sh "$GITHUB_WORKSPACE" > /tmp/eqxear.SRCINFO
+          mkdir /tmp/eqxear-metadata
+          cp packaging/arch/PKGBUILD /tmp/eqxear-metadata/PKGBUILD
+          chown -R builder:builder /tmp/eqxear-package /tmp/eqxear-metadata
+          runuser -u builder -- sh -c 'cd /tmp/eqxear-metadata && makepkg --printsrcinfo' > /tmp/eqxear.SRCINFO
           diff -u packaging/arch/.SRCINFO /tmp/eqxear.SRCINFO
-          chown -R builder:builder /tmp/eqxear-package
           runuser -u builder -- sh -c 'cd /tmp/eqxear-package && makepkg --noconfirm'
       - uses: actions/upload-artifact@v4
         with:
