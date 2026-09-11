@@ -1,0 +1,6 @@
+# Original interoperability example, not copied from an upstream preset.
+Preamp: -4.5 dB
+
+Filter 1: OFF LSC Fc 85 Hz Gain 2.5 dB Q 0.7
+Filter 2: ON PK Fc 2350 Hz Gain -4.2 dB Q 2.35 # Midrange
+Filter 3: ON HSC Fc 9100 Hz Gain 1.5 dB Q 0.8

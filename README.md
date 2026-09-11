@@ -34,11 +34,12 @@ Opening the app starts its background engine with the loaded curve. If the engin
 - **Normalize peak to 0 dB** compensates for the combined response with the preamp. A single +11.5 dB bell at 29 Hz with Q 0.3 gives -11.5 dB preamp. Raising the fader afterward adds makeup gain and can put peaks above zero again.
 - The fader has a console-style logarithmic amplitude taper, 0 dB unity, +18 dB at the top, and true mute at the bottom. Numeric entry and +/− buttons support 0.1 dB steps. Enter `-inf` to mute.
 - **Bypass EQ** smoothly bypasses the filters and preamp, including mute, for comparison. Editing while bypassed keeps bypass engaged until you enable EQ again.
+- **Import…** accepts EQ by Ear session JSON, EQxEar profile JSON, and Equalizer APO/PEQ text from a file or pasted text. Review the name, preamp and bands, then choose **Apply imported curve**. The current output and tone playback stay as they are. Use **Save as…** to retain the imported curve as a preset. Unsupported values produce an explanation instead of silently changing the EQ.
 - **Save as…** stores a preset; **Recall** makes it audible immediately. **Delete…** removes the selected saved preset after confirmation and leaves the current EQ playing. **Copy EQ** exports Equalizer APO text. Each graph/fader drag is one Undo step.
 - Drag an EQ point horizontally to change frequency and vertically to change gain. Click a point and scroll up to narrow its Q, or down to widen it. Numeric controls stay synchronized.
 - The spectrum analyzer shows 31 logarithmically spaced output-monitor bars, calibrated in dBFS. Enable **RTA behind EQ graph** for a low-contrast overlay; its height uses the analyzer’s -90 to 0 dBFS range independently of the EQ gain axis. Both views share one capture stream. Capture stops when both views are hidden, and closing the UI stops the analyzer.
 - Collapse panels with their caret buttons. Drag the dotted header handle to reorder, or focus it and press Alt+Up/Down. Order, collapsed state, and overlay visibility are saved in `ui.json`. Collapse the other panels to use the RTA in a small window.
-- Tone tuning remains available under the collapsed **Optional tone tuning** panel. It is not needed to tune while listening to music.
+- Under **Optional tone tuning**, mark the two edges of a peak or dip and choose **Create correction**. Either sweep direction works. EQxEar calculates the center halfway between the edges on the logarithmic frequency scale and estimates Q from their width. The marks clear after creating a band. Adjust the gain by listening; tone tuning is optional when listening to music.
 
 Closing the window leaves system EQ running. **Stop system EQ** smoothly disables processing while retaining the same virtual playback device in transparent passthrough. This avoids pausing media when its output device disappears. Starting EQ again reuses that device. The **Quit background service** button in **Output & presets** removes the virtual device and restores playback to the previous physical output. The editor stays open; choose **Start system EQ** to reconnect. Use this action before restarting the app after an upgrade so the new backend code can load. The app does not enable login autostart. Start it again after logging in.
 
@@ -56,7 +57,7 @@ The background service uses a private socket under `$XDG_RUNTIME_DIR/eqxear-v2`.
 
 `native/eq.c` implements eight stereo RBJ bell/shelf biquads plus preamp gain, mute, and bypass. PipeWire loads it through its filter-chain module as a private LV2 plugin. All audio buffers and filter state are allocated before processing; the audio callback uses no locks, filesystem access, or allocation. Audio runs outside the Python UI. Controls change on the existing node without restarting the stream.
 
-The DSP calculates coefficients at its actual sample rate. The graph and peak-normalization preview use 48 kHz. At lower sample rates, the DSP clamps frequencies above 49% of the sample rate. Normalization is a steady-state filter-response adjustment, not a true-peak limiter.
+The graph and normalization follow the processing rate reported by the native DSP, including when it changes during playback. Before a rate is available, the graph labels its 48 kHz preview fallback. At lower sample rates, filter frequencies above 49% of the sample rate use that limit; the graph shows the same response and holds the Nyquist endpoint above the playable range. A sample-rate change updates the graph but preserves your preamp setting. Choose **Normalize peak to 0 dB** again to recalculate headroom for the new rate. Normalization adjusts the steady-state filter response; it is not a true-peak limiter.
 
 The RTA uses an original radix-2 FFT in `native/fft.c`, with no external FFT library dependency. It retains Hann windowing, stereo power averaging, and calibrated dBFS readings.
 
@@ -68,13 +69,14 @@ python3 tests/ui_smoke.py
 dbus-run-session -- python3 tests/integration_v2.py
 dbus-run-session -- python3 tests/integration_spectrum.py
 dbus-run-session -- python3 tests/integration_recovery.py
+dbus-run-session -- python3 tests/integration_rate.py
 ```
 
 Native tests run the compiled plugin directly and check stereo isolation, live gain, normalization, mute, bypass, shelf responses, sample rates, and extreme control transitions. The GTK check verifies interactions and live-update scheduling without changing desktop audio. On a headless machine, run it with `xvfb-run -a dbus-run-session -- python3 tests/ui_smoke.py`. The launcher test uses GLib to launch a temporary stub application and also runs `desktop-file-validate` when installed.
 
 The integration test starts separate PipeWire, Pulse, and WirePlumber processes with hardware monitors disabled. It sends stereo audio through the actual EQxEar sink into a virtual speaker monitor, measures gain changes without restarting the node, and checks normalization, mute/unmute, bypass, output switching, routing restoration, stop/start without removing or corking the playback stream, and background-service reconnection.
 
-The recovery integration test checks service death, audio-graph loss and restart behavior in the same isolated environment.
+The recovery integration test checks service death, audio-graph loss and restart behavior in the same isolated environment. The sample-rate integration test measures normalized audio at 96 kHz and verifies live changes to 48, 44.1 and 32 kHz. Original response and preset-exchange fixtures are documented in [tests/fixtures/README.md](tests/fixtures/README.md).
 
 ## References
 

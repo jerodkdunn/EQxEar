@@ -5,6 +5,7 @@
 #include <lv2/core/lv2.h>
 #include <float.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -48,7 +49,12 @@ static LV2_Handle instantiate(const LV2_Descriptor *d,double rate,const char *pa
     (void)d; (void)path; (void)features;
     if (!isfinite(rate) || rate < 1000 || rate > 768000) return NULL;
     EQ *eq=calloc(1,sizeof(EQ));
-    if (eq) { eq->rate=rate; eq->gain=0; for(int b=0;b<BANDS;b++) eq->coeff[b]=identity(); }
+    if (eq) {
+        eq->rate=rate; eq->gain=0; for(int b=0;b<BANDS;b++) eq->coeff[b]=identity();
+        /* Setup-only telemetry for our controller. No logging in run(). */
+        const char *report=getenv("EQXEAR_REPORT_RATE");
+        if(report && strcmp(report,"1")==0) fprintf(stderr,"EQXEAR_SAMPLE_RATE=%.0f\n",rate);
+    }
     return eq;
 }
 static void connect_port(LV2_Handle instance,uint32_t port,void *data) {

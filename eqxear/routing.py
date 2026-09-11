@@ -4,6 +4,7 @@ import json
 from contextlib import contextmanager
 from contextvars import ContextVar
 import os
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -80,6 +81,9 @@ class Graph:
         self.routing_warning = ''
         self.instance = uuid.uuid4().hex
         self.log = None
+        self.sample_rate = None
+        self.rate_offset = 0
+        self.rate_pending = b''
 
     def start(self):
         lv2 = build_plugin()
@@ -118,8 +122,11 @@ class Graph:
             ],
         }
         path = self.directory/'pipewire.conf'; path.write_text('\n'.join(key+' = '+spa(value) for key,value in config.items()))
-        env = dict(os.environ, LV2_PATH=str(lv2)+':'+os.environ.get('LV2_PATH','/usr/lib/lv2'))
+        env = dict(os.environ, LV2_PATH=str(lv2)+':'+os.environ.get('LV2_PATH','/usr/lib/lv2'), EQXEAR_REPORT_RATE='1')
         self.log = (self.directory/'audio.log').open('a')
+        self.rate_offset = os.fstat(self.log.fileno()).st_size
+        self.rate_pending = b''
+        self.sample_rate = None
         try:
             self.process = subprocess.Popen([sys.executable, '-m', 'eqxear.child', str(os.getpid()),
                                              'pipewire','-c',str(path)], cwd=Path(__file__).resolve().parents[1],
@@ -208,12 +215,43 @@ class Graph:
         command(['pactl','move-sink-input',str(playback['index']),output])
         self.output = output
 
+    def read_sample_rate(self):
+        """Read only this child's setup records, including later rate renegotiation."""
+        try:
+            with (self.directory/'audio.log').open('rb') as log:
+                size = os.fstat(log.fileno()).st_size
+                if size < self.rate_offset:
+                    self.rate_offset = 0
+                    self.rate_pending = b''
+                    self.sample_rate = None
+                if size-self.rate_offset > 65536:
+                    self.rate_offset = size-65536
+                    self.rate_pending = b''
+                    self.sample_rate = None
+                    log.seek(self.rate_offset)
+                    log.readline()  # Discard a possible partial record.
+                else:
+                    log.seek(self.rate_offset)
+                data = self.rate_pending+log.read(65536)
+                self.rate_offset = log.tell()
+            lines = data.split(b'\n')
+            self.rate_pending = lines.pop()[-128:]
+            for line in lines:
+                match = re.fullmatch(rb'EQXEAR_SAMPLE_RATE=([0-9]{4,6})', line)
+                if match:
+                    rate = int(match[1])
+                    self.sample_rate = rate if 1000 <= rate <= 768000 else None
+        except OSError:
+            self.sample_rate = None
+        return self.sample_rate
+
     def snapshot(self):
         """Cheap command acknowledgement; status() performs the full health check."""
         alive = self.process is not None and self.process.poll() is None
         return {'running': alive, 'connected': alive, 'output': self.output,
                 'bypassed': self.bypassed, 'profile': self.profile.to_dict(),
-                'warning': self.routing_warning}
+                'warning': self.routing_warning,
+                'sample_rate': self.read_sample_rate() if alive else None}
 
     @command_budget(2)
     def status(self):
@@ -266,6 +304,7 @@ class Graph:
         finally:
             process, self.process = self.process, None
             self.node_id = None
+            self.sample_rate = None
             try:
                 if process:
                     if process.poll() is None:

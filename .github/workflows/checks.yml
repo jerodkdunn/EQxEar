@@ -36,3 +36,5 @@ jobs:
         run: dbus-run-session -- python3 tests/integration_spectrum.py
       - name: Isolated service and graph recovery
         run: dbus-run-session -- python3 tests/integration_recovery.py
+      - name: Isolated DSP sample-rate and normalization checks
+        run: dbus-run-session -- python3 tests/integration_rate.py

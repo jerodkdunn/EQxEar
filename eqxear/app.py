@@ -16,6 +16,7 @@ from .engine import Engine, Tone, outputs
 from .fader import LevelFader
 from .spectrum import Analyzer, draw_bars
 from .panels import Panel
+from .importers import import_profile, MAX_IMPORT_BYTES
 
 
 def label(text, style=None):
@@ -58,6 +59,8 @@ class Window(Gtk.ApplicationWindow):
                 self.profile = Profile.from_dict(json.loads(self.draft_path.read_text()))
             except (ValueError, KeyError, TypeError, OSError) as e:
                 self.draft_error = f'Could not read your draft: {e}. Original file left intact; fix or move it to resume draft saving.'
+        self.sample_rate = 48000
+        self.sample_rate_known = False
         self.marks = {}
         self.history = []
         self.dragging = None
@@ -127,6 +130,7 @@ class Window(Gtk.ApplicationWindow):
         self.recall_button = button('Recall', self.recall)
         row.append(self.recall_button)
         row.append(button('Save as…', self.save_dialog))
+        row.append(button('Import…', self.import_dialog))
         self.delete_button = button('Delete…', self.delete_preset_dialog)
         self.delete_button.set_tooltip_text('Delete the selected saved preset. The current EQ keeps playing.')
         row.append(self.delete_button)
@@ -167,6 +171,10 @@ class Window(Gtk.ApplicationWindow):
         self.overlay.connect("toggled", lambda *_: self.layout_changed())
         equalizer.append(self.overlay)
         equalizer.append(graph_row)
+        self.rate_notice = label('', 'muted')
+        self.rate_notice.set_wrap(True)
+        self.rate_notice.set_visible(False)
+        equalizer.append(self.rate_notice)
         row = box()
         row.append(label('PARAMETRIC EQ', 'section'))
         spacer = label(''); spacer.set_hexpand(True); row.append(spacer)
@@ -207,7 +215,7 @@ class Window(Gtk.ApplicationWindow):
         tune.append(row)
         row = box()
         self.mark_buttons = {}
-        for name in ('start', 'center', 'end'):
+        for name in ('start', 'end'):
             w = button('Mark '+name, lambda _, n=name: self.mark(n))
             self.mark_buttons[name] = w
             row.append(w)
@@ -215,7 +223,7 @@ class Window(Gtk.ApplicationWindow):
         row.append(self.dip)
         row.append(button('Create correction', self.create_correction))
         tune.append(row)
-        tune.append(label('Mark the start, center, and end of an uneven region. Adjust the correction gain by listening.', 'muted'))
+        tune.append(label('Mark the two edges of an uneven region. The correction is centered halfway between them on the frequency scale. Adjust its gain by listening.', 'muted'))
         spectrum = box(True, 6)
         self.rta = Gtk.DrawingArea(content_height=200, hexpand=True)
         self.rta.set_draw_func(self.draw_rta)
@@ -379,6 +387,18 @@ scale highlight {{ background: {accent}; }}
 
     def show_engine_state(self, state):
         self.validate_engine_state(state)
+        rate = state.get('sample_rate')
+        known = bool(state.get('connected') and type(rate) in (int, float)
+                     and 1000 <= rate <= 768000)
+        rate = float(rate) if known else 48000
+        if (rate, known) != (self.sample_rate, self.sample_rate_known):
+            self.sample_rate, self.sample_rate_known = rate, known
+            self.graph_limits = None
+            self.graph.queue_draw()
+        limited = self.sample_rate*.49 < 20000
+        self.rate_notice.set_visible(limited)
+        if limited:
+            self.rate_notice.set_text(f'At {self.sample_rate/1000:g} kHz, higher band frequencies use the {self.sample_rate*.49/1000:g} kHz DSP limit. Stored frequencies stay unchanged; the graph holds the Nyquist response above {self.sample_rate/2000:g} kHz.')
         if state.get('output'):
             self.monitor_output = state['output']
         running = state.get('running', False)
@@ -503,8 +523,9 @@ scale highlight {{ background: {accent}; }}
 
     def normalize_peak(self, *_):
         try:
-            self.preamp_changed(self.profile.normalization_preamp())
-            self.status.set_text(f'Preamp set to {self.profile.preamp:.1f} dB to remove boosts.')
+            self.preamp_changed(self.profile.normalization_preamp(rate=self.sample_rate))
+            context = f'{self.sample_rate/1000:g} kHz engine' if self.sample_rate_known else '48 kHz preview (engine rate unavailable)'
+            self.status.set_text(f'Preamp set to {self.profile.preamp:.1f} dB; peak normalized for the {context}.')
         except ValueError as e:
             self.status.set_text(str(e))
 
@@ -679,6 +700,135 @@ scale highlight {{ background: {accent}; }}
         entry.grab_focus()
         entry.select_region(0, -1)
 
+    def import_dialog(self, *_):
+        dialog = Gtk.Window(title='Import EQ', transient_for=self, modal=True,
+                            default_width=640, default_height=580)
+        content = box(True, 10)
+        for edge in ('top', 'bottom', 'start', 'end'):
+            getattr(content, 'set_margin_'+edge)(20)
+        description = label('Paste Equalizer APO text or EQ session JSON, or open a file. Review the curve before applying it.', 'muted')
+        description.set_wrap(True)
+        content.append(description)
+        content.append(label('Preset name'))
+        name = Gtk.Entry(placeholder_text='Use the imported name')
+        content.append(name)
+        source = Gtk.TextView(monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        source_scroll = Gtk.ScrolledWindow(min_content_height=140, vexpand=True)
+        source_scroll.set_child(source)
+        content.append(source_scroll)
+        review = label('No curve reviewed yet.', 'muted')
+        review.set_wrap(True)
+        review.set_selectable(True)
+        review_scroll = Gtk.ScrolledWindow(min_content_height=110, vexpand=True)
+        review_scroll.set_child(review)
+        content.append(review_scroll)
+        candidate = None
+        dialog.file_chooser = None
+
+        def invalidate(*_):
+            nonlocal candidate
+            candidate = None
+            accept.set_sensitive(False)
+            review.set_text('Review the edited input before applying it.')
+
+        def preview(*_):
+            nonlocal candidate
+            candidate = None
+            accept.set_sensitive(False)
+            buffer = source.get_buffer()
+            try:
+                profile = import_profile(buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), True),
+                                         name=name.get_text().strip() or 'Imported EQ')
+                if name.get_text().strip():
+                    profile.name = name.get_text().strip()
+                profile.validate()
+                name.set_text(profile.name)
+                lines = [profile.name, f'Preamp: {profile.preamp:+.1f} dB' + (' · MUTED' if profile.muted else '')]
+                for i, band in enumerate(profile.bands, 1):
+                    lines.append(f'{i}. {"ON" if band.enabled else "OFF"} · {band.kind} · {band.frequency:g} Hz · {band.gain:+g} dB · Q {band.q:g}')
+                if not profile.bands:
+                    lines.append('No filter bands')
+                lines.append('Apply changes the current curve. Use Save as… to keep it as a preset.')
+                review.set_text('\n'.join(lines))
+                candidate = profile
+                accept.set_sensitive(True)
+            except ValueError as error:
+                review.set_text(str(error))
+
+        def choose_file(*_):
+            chooser = Gtk.FileChooserNative.new('Open EQ file', dialog, Gtk.FileChooserAction.OPEN, 'Open', 'Cancel')
+            dialog.file_chooser = chooser
+            file_filter = Gtk.FileFilter()
+            file_filter.set_name('EQ text or JSON')
+            for pattern in ('*.txt', '*.json', '*.apo'):
+                file_filter.add_pattern(pattern)
+            chooser.add_filter(file_filter)
+            all_files = Gtk.FileFilter(); all_files.set_name('All files'); all_files.add_pattern('*')
+            chooser.add_filter(all_files)
+            def selected(native, response):
+                try:
+                    if response == Gtk.ResponseType.ACCEPT:
+                        file = native.get_file()
+                        path = file.get_path() if file else None
+                        if not path:
+                            raise ValueError('Choose a local EQ file.')
+                        with open(path, 'rb') as stream:
+                            data = stream.read(MAX_IMPORT_BYTES+1)
+                        if len(data) > MAX_IMPORT_BYTES:
+                            raise ValueError('EQ files must be no larger than 1 MiB.')
+                        source.get_buffer().set_text(data.decode('utf-8-sig'))
+                        preview()
+                except (OSError, ValueError) as error:
+                    invalidate()
+                    review.set_text(str(error))
+                finally:
+                    native.destroy()
+                    dialog.file_chooser = None
+            chooser.connect('response', selected)
+            chooser.show()
+
+        def apply_import(*_):
+            if candidate is None:
+                return
+            self.remember()
+            self.profile = copy.deepcopy(candidate)
+            self.selected_band = None
+            self.graph_limits = None
+            self.preset.set_selected(Gtk.INVALID_LIST_POSITION)
+            self.sync_preamp()
+            self.render_bands()
+            self.changed()
+            dialog.close()
+
+        actions = box()
+        actions.append(button('Open file…', choose_file))
+        actions.append(button('Review curve', preview))
+        actions.append(button('Cancel', lambda *_: dialog.close()))
+        accept = button('Apply imported curve', apply_import, 'suggested-action')
+        accept.set_sensitive(False)
+        actions.append(accept)
+        content.append(actions)
+        source.get_buffer().connect('changed', invalidate)
+        name.connect('changed', invalidate)
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        def dismiss(_, key, code, state):
+            if key == Gdk.KEY_Escape:
+                dialog.close()
+                return True
+            return False
+        keys.connect('key-pressed', dismiss)
+        dialog.add_controller(keys)
+        def close_import(*_):
+            if dialog.file_chooser is not None:
+                dialog.file_chooser.destroy()
+                dialog.file_chooser = None
+            return False
+        dialog.connect('close-request', close_import)
+        dialog.set_child(content)
+        dialog.present()
+        source.grab_focus()
+
     def copy_eq(self, *_):
         try:
             text = self.profile.apo()
@@ -724,10 +874,13 @@ scale highlight {{ background: {accent}; }}
         try:
             if len(self.profile.bands) >= 8:
                 raise ValueError('Eight bands maximum')
-            if len(self.marks) < 3:
-                raise ValueError('Mark start, center, and end first')
-            band = from_marks(**self.marks, dip=self.dip.get_active())
+            if not {'start', 'end'} <= self.marks.keys():
+                raise ValueError('Mark start and end first')
+            band = from_marks(self.marks['start'], self.marks['end'], dip=self.dip.get_active())
             self.remember(); self.profile.bands.append(band)
+            self.marks.clear()
+            for name, control in self.mark_buttons.items():
+                control.set_label('Mark '+name)
             self.render_bands(); self.changed()
         except ValueError as e:
             self.status.set_text(str(e))
@@ -737,8 +890,8 @@ scale highlight {{ background: {accent}; }}
         if self.graph_limits is None:
             values = [self.profile.preamp, 0]
             for f in [20*1000**(i/160) for i in range(161)] + [b.frequency for b in self.profile.bands]:
-                values.append(self.profile.preamp + self.profile.response(f))
-                values.extend(self.profile.preamp+b.response(f) for b in self.profile.bands if b.enabled)
+                values.append(self.profile.preamp + self.profile.response(f, rate=self.sample_rate))
+                values.extend(self.profile.preamp+b.response(f, rate=self.sample_rate) for b in self.profile.bands if b.enabled)
             low = min(-12, 6*math.floor(min(values)/6))
             high = max(12, 6*math.ceil(max(values)/6))
         else:
@@ -751,7 +904,7 @@ scale highlight {{ background: {accent}; }}
         if self.profile.muted:
             return None
         *_, x, y = self.graph_geometry(self.graph.get_width(), self.graph.get_height())
-        hits = [(math.hypot(px-x(b.frequency), py-y(self.profile.preamp+self.profile.response(b.frequency))), i)
+        hits = [(math.hypot(px-x(b.frequency), py-y(self.profile.preamp+self.profile.response(b.frequency, rate=self.sample_rate))), i)
                 for i, b in enumerate(self.profile.bands) if b.enabled]
         distance, index = min(hits, default=(math.inf, None))
         return index if distance <= 14 else None
@@ -902,25 +1055,26 @@ scale highlight {{ background: {accent}; }}
         if self.profile.muted:
             color(self.muted); cr.move_to(left, 12); cr.show_text('Preamp muted (−∞ dB). Raise the fader to restore the response.')
             return
-        color(self.muted); cr.move_to(left,12); cr.show_text(f'EQ + preamp {self.profile.preamp:+.1f} dB · 48 kHz preview · drag: frequency / gain · scroll: Q')
+        rate_label = f'{self.sample_rate/1000:g} kHz engine' if self.sample_rate_known else '48 kHz preview (engine rate unavailable)'
+        color(self.muted); cr.move_to(left,12); cr.show_text(f'EQ + preamp {self.profile.preamp:+.1f} dB · {rate_label} · drag: frequency / gain · scroll: Q')
         cr.save(); cr.rectangle(left,top,right-left,bottom-top); cr.clip()
         for band in self.profile.bands:
             color(self.muted,.45); cr.set_line_width(1)
             for i in range(321):
                 f=20*1000**(i/320)
-                (cr.move_to if i==0 else cr.line_to)(x(f),y(self.profile.preamp+band.response(f)))
+                (cr.move_to if i==0 else cr.line_to)(x(f),y(self.profile.preamp+band.response(f, rate=self.sample_rate)))
             cr.stroke()
         color(self.ink); cr.set_line_width(2)
         for i in range(481):
             f=20*1000**(i/480)
-            (cr.move_to if i==0 else cr.line_to)(x(f),y(self.profile.preamp+self.profile.response(f)))
+            (cr.move_to if i==0 else cr.line_to)(x(f),y(self.profile.preamp+self.profile.response(f, rate=self.sample_rate)))
         cr.stroke()
         color(self.accent,.6); cr.set_dash([3,4]); cr.set_line_width(1)
         cr.move_to(x(self.tone.frequency),top); cr.line_to(x(self.tone.frequency),bottom); cr.stroke(); cr.set_dash([])
         cr.restore()
         for index, band in enumerate(self.profile.bands):
             if band.enabled:
-                px, py = x(band.frequency), y(self.profile.preamp+self.profile.response(band.frequency))
+                px, py = x(band.frequency), y(self.profile.preamp+self.profile.response(band.frequency, rate=self.sample_rate))
                 color(self.accent if self.selected_band == index else self.ink)
                 cr.set_line_width(2); cr.new_sub_path(); cr.arc(px,py,7,0,2*math.pi); cr.stroke()
                 cr.move_to(px+10,py-8); cr.show_text(str(index+1))

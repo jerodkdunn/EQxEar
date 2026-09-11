@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "license": "Apache-2.0",
+  "provenance": "Original EQxEar cases. Reference gains measured from generated sine waves through the native plugin in memory; no audio server or third-party implementation used.",
+  "convention": "RBJ Q-form bell and shelves, including preamp. Center frequency clamped to [20, sample_rate_hz*0.49]. Shelf Q controls resonance.",
+  "tolerance_db": 1e-05,
+  "cases": [
+    {
+      "id": "bell-off-center-44100",
+      "sample_rate_hz": 44100,
+      "profile": {
+        "version": 1,
+        "name": "bell-off-center-44100",
+        "bands": [
+          {
+            "frequency": 12000.0,
+            "gain": 6.0,
+            "q": 1.0,
+            "kind": "Bell",
+            "enabled": true
+          }
+        ],
+        "preamp": 0.0,
+        "muted": false
+      },
+      "response_points": [
+        {
+          "frequency_hz": 18000,
+          "gain_db": 0.818030138
+        }
+      ]
+    },
+    {
+      "id": "resonant-low-shelf-44100",
+      "sample_rate_hz": 44100,
+      "profile": {
+        "version": 1,
+        "name": "resonant-low-shelf-44100",
+        "bands": [
+          {
+            "frequency": 1000.0,
+            "gain": 6.0,
+            "q": 5.0,
+            "kind": "Lo-shelf",
+            "enabled": true
+          }
+        ],
+        "preamp": 0.0,
+        "muted": false
+      },
+      "response_points": [
+        {
+          "frequency_hz": 700,
+          "gain_db": 11.541805945
+        },
+        {
+          "frequency_hz": 1000,
+          "gain_db": 2.999999988
+        }
+      ]
+    },
+    {
+      "id": "bell-off-center-48000",
+      "sample_rate_hz": 48000,
+      "profile": {
+        "version": 1,
+        "name": "bell-off-center-48000",
+        "bands": [
+          {
+            "frequency": 12000.0,
+            "gain": 6.0,
+            "q": 1.0,
+            "kind": "Bell",
+            "enabled": true
+          }
+        ],
+        "preamp": 0.0,
+        "muted": false
+      },
+      "response_points": [
+        {
+          "frequency_hz": 18000,
+          "gain_db": 1.244811589
+        }
+      ]
+    },
+    {
+      "id": "resonant-low-shelf-48000",
+      "sample_rate_hz": 48000,
+      "profile": {
+        "version": 1,
+        "name": "resonant-low-shelf-48000",
+        "bands": [
+          {
+            "frequency": 1000.0,
+            "gain": 6.0,
+            "q": 5.0,
+            "kind": "Lo-shelf",
+            "enabled": true
+          }
+        ],
+        "preamp": 0.0,
+        "muted": false
+      },
+      "response_points": [
+        {
+          "frequency_hz": 700,
+          "gain_db": 11.544442317
+        },
+        {
+          "frequency_hz": 1000,
+          "gain_db": 3.000000022
+        }
+      ]
+    },
+    {
+      "id": "bell-off-center-96000",
+      "sample_rate_hz": 96000,
+      "profile": {
+        "version": 1,
+        "name": "bell-off-center-96000",
+        "bands": [
+          {
+            "frequency": 12000.0,
+            "gain": 6.0,
+            "q": 1.0,
+            "kind": "Bell",
+            "enabled": true
+          }
+        ],
+        "preamp": 0.0,
+        "muted": false
+      },
+      "response_points": [
+        {
+          "frequency_hz": 18000,
+          "gain_db": 3.019659223
+        }
+      ]
+    },
+    {
+      "id": "resonant-low-shelf-96000",
+      "sample_rate_hz": 96000,
+      "profile": {
+        "version": 1,
+        "name": "resonant-low-shelf-96000",
+        "bands": [
+          {
+            "frequency": 1000.0,
+            "gain": 6.0,
+            "q": 5.0,
+            "kind": "Lo-shelf",
+            "enabled": true
+          }
+        ],
+        "preamp": 0.0,
+        "muted": false
+      },
+      "response_points": [
+        {
+          "frequency_hz": 700,
+          "gain_db": 11.555147597
+        },
+        {
+          "frequency_hz": 1000,
+          "gain_db": 2.999999974
+        }
+      ]
+    },
+    {
+      "id": "low-rate-frequency-clamp",
+      "sample_rate_hz": 32000,
+      "profile": {
+        "version": 1,
+        "name": "low-rate-frequency-clamp",
+        "bands": [
+          {
+            "frequency": 20000.0,
+            "gain": 6.0,
+            "q": 1.0,
+            "kind": "Bell",
+            "enabled": true
+          }
+        ],
+        "preamp": 0.0,
+        "muted": false
+      },
+      "response_points": [
+        {
+          "frequency_hz": 15000,
+          "gain_db": 0.708993342
+        },
+        {
+          "frequency_hz": 15680,
+          "gain_db": 5.999999962
+        }
+      ]
+    },
+    {
+      "id": "resonant-high-shelf",
+      "sample_rate_hz": 48000,
+      "profile": {
+        "version": 1,
+        "name": "resonant-high-shelf",
+        "bands": [
+          {
+            "frequency": 8000.0,
+            "gain": -6.0,
+            "q": 5.0,
+            "kind": "Hi-shelf",
+            "enabled": true
+          }
+        ],
+        "preamp": 0.0,
+        "muted": false
+      },
+      "response_points": [
+        {
+          "frequency_hz": 6500,
+          "gain_db": 8.121538028
+        },
+        {
+          "frequency_hz": 9500,
+          "gain_db": -14.527477016
+        }
+      ]
+    },
+    {
+      "id": "normalized-overlap-96k",
+      "sample_rate_hz": 96000,
+      "profile": {
+        "version": 1,
+        "name": "normalized-overlap-96k",
+        "bands": [
+          {
+            "frequency": 12000.0,
+            "gain": 6.0,
+            "q": 0.3,
+            "kind": "Bell",
+            "enabled": true
+          },
+          {
+            "frequency": 20000.0,
+            "gain": 6.0,
+            "q": 0.3,
+            "kind": "Bell",
+            "enabled": true
+          }
+        ],
+        "preamp": -11.6,
+        "muted": false
+      },
+      "response_points": [
+        {
+          "frequency_hz": 15683.256044692023,
+          "gain_db": -0.03895075
+        }
+      ]
+    }
+  ]
+}

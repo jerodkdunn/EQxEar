@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "freq": 415,
+  "levelDb": -42,
+  "eqOn": false,
+  "preampDb": -4.5,
+  "preampAuto": true,
+  "bands": [
+    {"id": "bass", "type": "LSC", "fc": 85, "gain": 2.5, "q": 0.7, "enabled": false},
+    {"id": "mid", "type": "PK", "fc": 2350, "gain": -4.2, "q": 2.35, "enabled": true},
+    {"id": "treble", "type": "HSC", "fc": 9100, "gain": 1.5, "q": 0.8, "enabled": true}
+  ],
+  "selectedId": "mid",
+  "draft": {"kind": "dip", "start": 900, "top": 1000, "end": 1200},
+  "theme": "light",
+  "output": "browser-only-device"
+}

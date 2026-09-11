@@ -148,6 +148,27 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual([c.kwargs['timeout'] for c in child.wait.call_args_list], [1, 1])
         self.assertIsNone(graph.process)
 
+    def test_sample_rate_tracks_only_new_complete_dsp_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'audio.log'
+            path.write_bytes(b'EQXEAR_SAMPLE_RATE=44100\n')
+            graph = Graph(directory, Profile('Test', []), 'speakers')
+            graph.rate_offset = path.stat().st_size
+            self.assertIsNone(graph.read_sample_rate())
+            with path.open('ab') as log:
+                log.write(b'unrelated log line\nEQXEAR_SAMPLE_RATE=960')
+            self.assertIsNone(graph.read_sample_rate())
+            with path.open('ab') as log:
+                log.write(b'00\n')
+            self.assertEqual(graph.read_sample_rate(), 96000)
+            with path.open('ab') as log:
+                log.write(b'EQXEAR_SAMPLE_RATE=32000\n')
+            self.assertEqual(graph.read_sample_rate(), 32000)
+            path.write_bytes(b'EQXEAR_SAMPLE_RATE=48000\n')
+            self.assertEqual(graph.read_sample_rate(), 48000)
+            path.unlink()
+            self.assertIsNone(graph.read_sample_rate())
+
     def test_runtime_rejects_symlink_and_repairs_permissions(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {'XDG_RUNTIME_DIR':directory}):
             path = runtime()

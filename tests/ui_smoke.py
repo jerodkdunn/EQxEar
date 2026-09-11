@@ -16,6 +16,9 @@ for variable, directory in (('XDG_DATA_HOME', 'data'), ('XDG_CACHE_HOME', 'cache
     os.environ[variable] = str(location)
 from eqxear.app import App, Window, GLib, Gio
 from eqxear.model import Band, Profile
+from eqxear.spectrum import Analyzer
+analyzer_patch = patch.object(Analyzer, 'set_source')
+analyzer_patch.start()
 
 with tempfile.TemporaryDirectory() as temp:
     os.environ['XDG_DATA_HOME']=temp
@@ -30,9 +33,24 @@ with tempfile.TemporaryDirectory() as temp:
     window.edit_band(window.profile.bands[0],'gain',4)
     window.normalize_peak()
     assert window.profile.preamp <= -4
-    window.marks={'start':500,'center':1000,'end':1500}
+    window.marks={'start':500,'end':2000}
     window.create_correction()
     assert len(window.profile.bands)==2
+    assert window.profile.bands[-1].frequency == 1000
+    assert not window.marks
+    assert set(window.mark_buttons) == {'start', 'end'}
+    assert all(control.get_label() == 'Mark '+name for name, control in window.mark_buttons.items())
+    window.create_correction()
+    assert len(window.profile.bands) == 2 and 'Mark start and end' in window.status.get_text()
+    window.marks = {'start':2000, 'end':500}
+    window.create_correction()
+    assert len(window.profile.bands) == 3 and not window.marks
+    assert window.profile.bands[-1].frequency == 1000
+    window.undo()
+    window.marks = {'start':1000, 'end':1000}
+    window.create_correction()
+    assert len(window.profile.bands) == 2 and window.marks == {'start':1000, 'end':1000}
+    window.marks.clear()
     window.remove_band(0)
     window.undo()
     assert len(window.profile.bands)==2
@@ -293,6 +311,129 @@ with tempfile.TemporaryDirectory() as temp:
         assert window.quit_service_button.get_sensitive()
     window.connected_once = False
 
+    # Negotiated engine rate changes the preview/normalization calculation,
+    # never the saved preamp, and old/invalid service replies use 48 kHz.
+    rate_profile = copy.deepcopy(window.profile)
+    window.graph_limits = (-24, 24)
+    window.show_engine_state({'running': False, 'connected': True, 'sample_rate': 96000})
+    assert window.sample_rate == 96000 and window.sample_rate_known
+    assert window.graph_limits is None and window.profile == rate_profile
+    with patch.object(window.profile, 'normalization_preamp', return_value=-2) as normalize:
+        window.normalize_peak()
+        normalize.assert_called_once_with(rate=96000)
+    window.draw_graph(window.graph, cairo.Context(surface), 1000, 240)
+    window.show_engine_state({'connected': True, 'sample_rate': 32000})
+    assert window.rate_notice.get_visible() and '15.68 kHz DSP limit' in window.rate_notice.get_text()
+    window.draw_graph(window.graph, cairo.Context(surface), 1000, 240)
+    for state in ({'connected': False, 'sample_rate': 96000}, {},
+                  {'connected': True, 'sample_rate': None}, {'connected': True, 'sample_rate': True},
+                  {'connected': True, 'sample_rate': float('nan')}, {'connected': True, 'sample_rate': 999},
+                  {'connected': True, 'sample_rate': 10**400}):
+        preamp = window.profile.preamp
+        window.show_engine_state(state)
+        assert window.sample_rate == 48000 and not window.sample_rate_known
+        assert window.profile.preamp == preamp
+
+    # Pasted imports are reviewed before changing the current curve, with
+    # disabled filters and original headroom retained. Cancel/escape are inert.
+    def descendants(widget):
+        yield widget
+        child = widget.get_first_child()
+        while child is not None:
+            yield from descendants(child)
+            child = child.get_next_sibling()
+
+    def import_controls():
+        dialog = next(w for w in Gtk.Window.list_toplevels() if w.get_title() == 'Import EQ' and w.get_visible())
+        widgets = list(descendants(dialog))
+        source = next(w for w in widgets if isinstance(w, Gtk.TextView))
+        name = next(w for w in widgets if isinstance(w, Gtk.Entry))
+        buttons = {w.get_label(): w for w in widgets if isinstance(w, Gtk.Button)}
+        return dialog, source.get_buffer(), name, buttons
+
+    text = 'Preamp: -7.5 dB\nFilter 1: ON PK Fc 1000 Hz Gain -3 dB Q 1\nFilter 2: OFF PK Fc 200 Hz Gain 2 dB Q .7'
+    before_import = copy.deepcopy(window.profile)
+    library_bytes = window.library.path.read_bytes()
+    draft_bytes = window.draft_path.read_bytes()
+    window.import_dialog()
+    dialog, buffer, name, buttons = import_controls()
+    assert not buttons['Apply imported curve'].get_sensitive()
+    buffer.set_text('Not an EQ')
+    buttons['Review curve'].emit('clicked')
+    assert not buttons['Apply imported curve'].get_sensitive()
+    assert buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), True) == 'Not an EQ'
+    buffer.set_text(text)
+    name.set_text('Imported review')
+    buttons['Review curve'].emit('clicked')
+    assert buttons['Apply imported curve'].get_sensitive()
+    labels = [w.get_text() for w in descendants(dialog) if isinstance(w, Gtk.Label)]
+    assert any('OFF' in value and '-7.5' in value and 'Imported review' in value for value in labels)
+    assert window.profile == before_import
+    keys = next(c for c in dialog.observe_controllers() if isinstance(c, Gtk.EventControllerKey))
+    assert keys.emit('key-pressed', Gdk.KEY_Escape, 0, Gdk.ModifierType(0))
+    assert not dialog.get_visible() and window.profile == before_import
+    assert window.library.path.read_bytes() == library_bytes
+    assert window.draft_path.read_bytes() == draft_bytes
+
+    window.import_dialog()
+    dialog, buffer, name, buttons = import_controls()
+    buffer.set_text(text)
+    buttons['Review curve'].emit('clicked')
+    name.set_text('Reviewed name changed')
+    assert not buttons['Apply imported curve'].get_sensitive()
+    buttons['Cancel'].emit('clicked')
+    assert not dialog.get_visible() and window.profile == before_import
+
+    # Native file selection uses the same review path; loading alone does not
+    # touch the editor or library, and chooser cancellation is also inert.
+    imported_file = Path(temp)/'test-import.json'
+    imported_file.write_text(json.dumps(Profile('File EQ', [Band(500, -2)], -4).to_dict()))
+    class Chooser:
+        def add_filter(self, _): pass
+        def connect(self, _, callback): self.callback = callback
+        def get_file(self): return Gio.File.new_for_path(str(imported_file))
+        def show(self): pass
+        def destroy(self): pass
+    window.import_dialog()
+    dialog, buffer, name, buttons = import_controls()
+    chooser = Chooser()
+    with patch.object(Gtk.FileChooserNative, 'new', return_value=chooser):
+        buttons['Open file…'].emit('clicked')
+        chooser.callback(chooser, Gtk.ResponseType.CANCEL)
+        assert not buttons['Apply imported curve'].get_sensitive()
+        buttons['Open file…'].emit('clicked')
+        chooser.callback(chooser, Gtk.ResponseType.ACCEPT)
+        assert buttons['Apply imported curve'].get_sensitive()
+        assert name.get_text() == 'File EQ'
+    assert window.profile == before_import
+    buttons['Cancel'].emit('clicked')
+
+    window.import_dialog()
+    dialog, buffer, name, buttons = import_controls()
+    buffer.set_text(text)
+    name.set_text('Imported live')
+    buttons['Review curve'].emit('clicked')
+    history_count = len(window.history)
+    window.engine.owned = True
+    with patch.object(window.engine, 'start') as start, patch.object(window.engine, 'select_output') as output, patch.object(window.tone, 'start') as tone, patch.object(window.engine, 'apply', return_value={'running': True, 'connected': True}) as apply:
+        buttons['Apply imported curve'].emit('clicked')
+        assert not dialog.get_visible()
+        assert window.profile.name == 'Imported live' and window.profile.preamp == -7.5
+        assert [b.enabled for b in window.profile.bands] == [True, False]
+        assert len(window.history) == history_count+1
+        assert window.library.path.read_bytes() == library_bytes
+        assert window.dirty
+        if window.live_timer:
+            GLib.source_remove(window.live_timer)
+            window.live_timer = 0
+        window.flush_live()
+        settle()
+        assert apply.called and apply.call_args.args[0].preamp == -7.5
+        start.assert_not_called(); output.assert_not_called(); tone.assert_not_called()
+        window.engine.owned = False
+    window.undo()
+    assert window.profile == before_import
+
     # Malformed draft bytes remain recoverable even after an edit.
     window.draft_path.write_text('[null]')
     original = window.draft_path.read_bytes()
@@ -312,4 +453,5 @@ with tempfile.TemporaryDirectory() as temp:
         disconnect.assert_not_called()
     print('PASS: GTK controls, normalization, graph dragging, gain limits, shelf dragging, single-step undo, draft persistence, graph rendering, silent close')
 
+analyzer_patch.stop()
 temporary_environment.cleanup()

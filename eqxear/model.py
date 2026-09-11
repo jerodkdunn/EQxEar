@@ -38,8 +38,12 @@ class Band:
         return self
 
     def coefficients(self, rate=48000):
+        rate = bounded(rate, 1000, 768000)
+        if abs(self.gain) < 1e-12:
+            return (1., 0., 0.), (1., 0., 0.)
         a = 10 ** (self.gain / 40)
-        w = 2 * math.pi * self.frequency / rate
+        frequency = max(20, min(self.frequency, rate*.49))
+        w = 2 * math.pi * frequency / rate
         c, alpha = math.cos(w), math.sin(w) / (2 * self.q)
         if self.kind == 'Bell':
             return (1+alpha*a, -2*c, 1-alpha*a), (1+alpha/a, -2*c, 1-alpha/a)
@@ -48,11 +52,19 @@ class Band:
             return (a*((a+1)-(a-1)*c+t), 2*a*((a-1)-(a+1)*c), a*((a+1)-(a-1)*c-t)), ((a+1)+(a-1)*c+t, -2*((a-1)+(a+1)*c), (a+1)+(a-1)*c-t)
         return (a*((a+1)+(a-1)*c+t), -2*a*((a-1)+(a+1)*c), a*((a+1)+(a-1)*c-t)), ((a+1)-(a-1)*c+t, 2*((a-1)-(a+1)*c), (a+1)-(a-1)*c-t)
 
-    def response(self, frequency):
-        if not self.enabled:
+    def response(self, frequency, rate=48000):
+        rate = bounded(rate, 1000, 768000)
+        # The preview can extend above a low-rate engine's Nyquist frequency.
+        # Hold its endpoint response there instead of displaying aliased lobes.
+        frequency = min(bounded(frequency, 0, math.inf), rate/2)
+        if not self.enabled or abs(self.gain) < 1e-12:
             return 0
-        b, a = self.coefficients()
-        z = cmath.exp(-2j * math.pi * frequency / 48000)
+        if frequency == 0:
+            return self.gain if self.kind == 'Lo-shelf' else 0
+        if frequency == rate/2:
+            return self.gain if self.kind == 'Hi-shelf' else 0
+        b, a = self.coefficients(rate)
+        z = cmath.exp(-2j * math.pi * frequency / rate)
         return 20 * math.log10(abs((b[0]+b[1]*z+b[2]*z*z)/(a[0]+a[1]*z+a[2]*z*z)))
 
 @dataclass
@@ -76,29 +88,32 @@ class Profile:
             band.validate()
         return self
 
-    def response(self, f):
-        return sum(b.response(f) for b in self.bands)
+    def response(self, f, rate=48000):
+        rate = bounded(rate, 1000, 768000)
+        f = bounded(f, 0, math.inf)
+        return sum(b.response(f, rate) for b in self.bands)
 
-    def normalization_preamp(self):
+    def normalization_preamp(self, rate=48000):
         """Attenuate the combined response, rounding toward more headroom.
 
         Refine local maxima on a log-frequency grid, including exact band
-        centers and the DC/Nyquist endpoints of the 48 kHz preview.
+        centers and the DC/Nyquist endpoints at the actual processing rate.
         """
-        logs = [math.log(.01) + math.log(24000/.01)*i/4096 for i in range(4097)]
-        values = [self.response(math.exp(x)) for x in logs]
-        peak = max(0, *values, self.response(0), self.response(24000),
-                   *(self.response(b.frequency) for b in self.bands if b.enabled))
+        rate = bounded(rate, 1000, 768000)
+        logs = [math.log(.01) + math.log((rate/2)/.01)*i/4096 for i in range(4097)]
+        values = [self.response(math.exp(x), rate) for x in logs]
+        peak = max(0, *values, self.response(0, rate), self.response(rate/2, rate),
+                   *(self.response(max(20, min(b.frequency, rate*.49)), rate) for b in self.bands if b.enabled))
         for i in range(1, len(logs)-1):
             if values[i] > values[i-1] and values[i] >= values[i+1]:
                 lo, hi = logs[i-1], logs[i+1]
                 for _ in range(36):
                     a, b = lo+(hi-lo)/3, hi-(hi-lo)/3
-                    if self.response(math.exp(a)) < self.response(math.exp(b)):
+                    if self.response(math.exp(a), rate) < self.response(math.exp(b), rate):
                         lo = a
                     else:
                         hi = b
-                peak = max(peak, self.response(math.exp((lo+hi)/2)))
+                peak = max(peak, self.response(math.exp((lo+hi)/2), rate))
         attenuation = math.ceil(max(0, peak-1e-8)*10)/10
         if attenuation > 96:
             raise ValueError('This curve needs more than 96 dB of attenuation. Reduce band boosts before normalizing.')
@@ -130,9 +145,12 @@ class Profile:
             raise ValueError('The fader is muted. Raise it before exporting a numeric EQ preset.')
         return f'Preamp: {self.preamp:.1f} dB\n' + ''.join(f'Filter {i+1}: {"ON" if b.enabled else "OFF"} {kinds[b.kind]} Fc {b.frequency:.1f} Hz Gain {b.gain:.1f} dB Q {b.q:.2f}\n' for i, b in enumerate(self.bands))
 
-def from_marks(start, center, end, dip=False):
-    if not 20 <= start < center < end <= 20000:
-        raise ValueError('Mark start, center, and end in ascending frequency order')
+def from_marks(start, end, dip=False):
+    """Build a correction from two edges on the logarithmic frequency axis."""
+    start, end = sorted((bounded(start, 20, 20000), bounded(end, 20, 20000)))
+    if start == end:
+        raise ValueError('Mark two different frequencies for the correction edges')
+    center = math.sqrt(start*end)
     return Band(center, 3 if dip else -3, max(.3, min(10, center/(end-start))))
 
 def atomic_json(path, data):

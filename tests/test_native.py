@@ -2,9 +2,11 @@
 """Run the actual native plugin without speakers or an audio server."""
 import ctypes as c
 import math
+import json
+from pathlib import Path
 import unittest
 from eqxear.build import build_plugin
-from eqxear.model import Band
+from eqxear.model import Band, Profile
 
 Instantiate=c.CFUNCTYPE(c.c_void_p,c.c_void_p,c.c_double,c.c_char_p,c.c_void_p)
 Connect=c.CFUNCTYPE(None,c.c_void_p,c.c_uint32,c.c_void_p)
@@ -153,3 +155,37 @@ class NativeTests(unittest.TestCase):
             self.assertAlmostEqual(p.measure()[0],0,places=4)
             self.assertTrue(math.isfinite(state.history[0][3].y1))
         finally:p.close()
+
+
+    def test_shared_response_fixtures(self):
+        fixtures = json.loads((Path(__file__).parent/'fixtures/response-cases.json').read_text())
+        for case in fixtures['cases']:
+            profile = Profile.from_dict(case['profile'])
+            plugin = Plugin(case['sample_rate_hz'])
+            try:
+                plugin.controls[0].value = profile.preamp
+                for i, band in enumerate(profile.bands):
+                    for offset,value in enumerate(({'Bell':1,'Lo-shelf':2,'Hi-shelf':3}[band.kind],band.frequency,band.gain,band.q)):
+                        plugin.controls[3+4*i+offset].value = value
+                for point in case['response_points']:
+                    with self.subTest(case=case['id'],frequency=point['frequency_hz']):
+                        self.assertAlmostEqual(plugin.measure(point['frequency_hz'])[0],point['gain_db'],delta=fixtures['tolerance_db'])
+            finally: plugin.close()
+
+    def test_normalization_matches_native_at_multiple_rates(self):
+        profile = Profile('Treble overlap',[Band(12000,6,.3),Band(20000,6,.3)])
+        for rate in (32000,44100,48000,96000):
+            plugin = Plugin(rate)
+            try:
+                preamp = profile.normalization_preamp(rate)
+                plugin.controls[0].value = preamp
+                for i,band in enumerate(profile.bands):
+                    for offset,value in enumerate((1,band.frequency,band.gain,band.q)):
+                        plugin.controls[3+4*i+offset].value = value
+                frequencies = [20*((rate*.499)/20)**(i/3000) for i in range(3001)]
+                peak, frequency = max((profile.response(f,rate),f) for f in frequencies)
+                actual = plugin.measure(frequency)[0]
+                self.assertAlmostEqual(actual,peak+preamp,delta=1e-5)
+                self.assertLessEqual(actual,1e-6)
+                self.assertGreater(actual,-.101)
+            finally: plugin.close()
