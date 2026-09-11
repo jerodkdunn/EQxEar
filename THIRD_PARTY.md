@@ -26,7 +26,8 @@ Omarchy itself is not bundled and is not required to run the application.
 ## Implementation sources
 
 DMS's [original YouTube video](https://youtu.be/WIWHINQ5lV8) and
-[EQ by Ear utility](https://eqbyear.com/) inspired this project. Credit goes to
+[EQ by Ear utility](https://eqbyear.com/) inspired this project. Its
+[source repository](https://github.com/DMS3tv/eqbyear) is also available. Credit goes to
 DMS for the idea that EQxEar continues as a live desktop system equalizer.
 EQxEar is an independent implementation, with no copied website code or assets
 and no affiliation or endorsement implied.

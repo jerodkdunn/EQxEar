@@ -2,7 +2,7 @@
 
 A live system equalizer for Omarchy, with its own native PipeWire DSP. Play music, drag an EQ point or move the preamp fader, and hear the change immediately.
 
-EQxEar was inspired by DMS's [original YouTube video](https://youtu.be/WIWHINQ5lV8) and [EQ by Ear utility](https://eqbyear.com/). Credit goes to DMS for the idea that started this project. EQxEar continues that idea as a desktop application with live system-wide EQ, saved presets, and controls for tuning while listening. Thank you, DMS, for sharing it.
+EQxEar was inspired by DMS's [original YouTube video](https://youtu.be/WIWHINQ5lV8) and [EQ by Ear utility](https://eqbyear.com/), whose [source is now available on GitHub](https://github.com/DMS3tv/eqbyear). Credit goes to DMS for the idea that started this project. EQxEar continues that idea as a desktop application with live system-wide EQ, saved presets, and controls for tuning while listening. Thank you, DMS, for sharing it.
 
 ## Run
 
