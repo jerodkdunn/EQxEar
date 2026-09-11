@@ -90,9 +90,11 @@ jobs:
           path: /tmp/eqxear-package
       - name: Install package without a compiler
         run: |
+          # Arch's minimal image excludes documentation by default. Install all
+          # package files so the integrity check can verify the complete layout.
+          sed -i '/^[[:space:]]*NoExtract[[:space:]]*=/d' /etc/pacman.conf
           pacman -U --noconfirm /tmp/eqxear-package/*.pkg.tar.zst
-          ! command -v cc
-          ! command -v gcc
+          if command -v cc || command -v gcc; then exit 1; fi
           useradd -m listener
           pacman -Qkk eqxear
       - name: Installed command, desktop and GTK interactions
