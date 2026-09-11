@@ -22,8 +22,6 @@ The LV2 notice is included because the plugin is compiled against its core
 header. The launcher uses the desktop's `audio-card` icon; no third-party icon
 asset is bundled. Omarchy theme colors are read from the user's installation.
 Omarchy itself is not bundled and is not required to run the application.
-EasyEffects is optional only for a coexistence integration test and is not an
-application dependency.
 
 ## Implementation sources
 

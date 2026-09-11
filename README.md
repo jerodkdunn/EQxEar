@@ -1,10 +1,8 @@
 # EQxEar
 
-A live system equalizer for Omarchy, with its own native PipeWire DSP. Play music, drag an EQ point or move the preamp fader, and hear the change immediately. EasyEffects is not required.
+A live system equalizer for Omarchy, with its own native PipeWire DSP. Play music, drag an EQ point or move the preamp fader, and hear the change immediately.
 
 EQxEar was inspired by DMS's [original YouTube video](https://youtu.be/WIWHINQ5lV8) and [EQ by Ear utility](https://eqbyear.com/). Credit goes to DMS for the idea that started this project. EQxEar continues that idea as a desktop application with live system-wide EQ, saved presets, and controls for tuning while listening. Thank you, DMS, for sharing it.
-
-This repository contains the maintained native PipeWire application. The earlier EasyEffects-based prototype is deprecated.
 
 ## Run
 
@@ -27,7 +25,7 @@ Use a normal desktop user session with PipeWire, pipewire-pulse and WirePlumber 
 
 The validated desktop stack is Omarchy/Arch Linux with Python 3.14.7, GTK 4.22.4, PipeWire 1.6.8 and WirePlumber 0.5.17. These are tested versions, not established minimum versions for GTK or PipeWire. Other distributions have not yet been validated. The CI workflow uses an Arch container and records its package versions; it runs audio against isolated virtual devices. Its audio-session configuration uses WirePlumber 0.5 syntax. Omarchy supplies optional theme colors; another GTK desktop can use the fallback theme.
 
-Opening the app starts its background engine with the loaded curve. If the engine is already running, reopening the app reconnects to its current curve and output. The output stage is identified so EasyEffects does not recapture it into an audio loop. Closing EasyEffects still avoids applying its effects alongside EQxEar.
+Opening the app starts its background engine with the loaded curve. If the engine is already running, reopening the app reconnects to its current curve and output.
 
 ## Listening
 
@@ -74,7 +72,7 @@ dbus-run-session -- python3 tests/integration_recovery.py
 
 Native tests run the compiled plugin directly and check stereo isolation, live gain, normalization, mute, bypass, shelf responses, sample rates, and extreme control transitions. The GTK check verifies interactions and live-update scheduling without changing desktop audio. On a headless machine, run it with `xvfb-run -a dbus-run-session -- python3 tests/ui_smoke.py`. The launcher test uses GLib to launch a temporary stub application and also runs `desktop-file-validate` when installed.
 
-The integration test starts separate PipeWire, Pulse, and WirePlumber processes with hardware monitors disabled. It sends stereo audio through the actual EQxEar sink into a virtual speaker monitor, measures gain changes without restarting the node, and checks normalization, mute/unmute, bypass, output switching, routing restoration, coexistence with EasyEffects, stop/start without removing or corking the playback stream, and background-service reconnection.
+The integration test starts separate PipeWire, Pulse, and WirePlumber processes with hardware monitors disabled. It sends stereo audio through the actual EQxEar sink into a virtual speaker monitor, measures gain changes without restarting the node, and checks normalization, mute/unmute, bypass, output switching, routing restoration, stop/start without removing or corking the playback stream, and background-service reconnection.
 
 The recovery integration test checks service death, audio-graph loss and restart behavior in the same isolated environment.
 

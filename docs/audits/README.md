@@ -11,6 +11,6 @@ background service. Tests used isolated audio services and virtual devices.
 See [GitHub Actions](https://github.com/jerodkdunn/EQxEar/actions/workflows/checks.yml)
 for checks on public revisions. The native sanitizer check is retained here.
 
-EasyEffects coexistence was skipped because EasyEffects was not installed. The
-current backend is Linux-only. This review does not establish macOS support,
+Coexistence with other audio processors was not validated. The current backend
+is Linux-only. This review does not establish macOS support,
 trademark clearance, or App Store approval.
