@@ -1,0 +1,38 @@
+name: Checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    timeout-minutes: 15
+    env:
+      GSK_RENDERER: cairo
+      GTK_A11Y: none
+    steps:
+      - name: Install Linux dependencies
+        run: >-
+          pacman -Syu --noconfirm --needed
+          git python python-gobject python-cairo gtk4 lv2
+          pipewire pipewire-audio pipewire-pulse wireplumber libpulse
+          dbus xorg-server-xvfb xorg-xauth desktop-file-utils
+      - uses: actions/checkout@v4
+      - name: Record tested stack
+        run: |
+          python3 --version
+          pkg-config --modversion gtk4 libpipewire-0.3 lv2
+          wireplumber --version
+      - name: Unit, native DSP and desktop launcher tests
+        run: dbus-run-session -- python3 -m unittest discover -s tests -v
+      - name: GTK interaction checks
+        run: xvfb-run -a dbus-run-session -- python3 tests/ui_smoke.py
+      - name: Isolated system EQ integration
+        run: dbus-run-session -- python3 tests/integration_v2.py
+      - name: Isolated spectrum capture integration
+        run: dbus-run-session -- python3 tests/integration_spectrum.py
+      - name: Isolated service and graph recovery
+        run: dbus-run-session -- python3 tests/integration_recovery.py

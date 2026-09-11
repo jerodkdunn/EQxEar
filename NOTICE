@@ -1,0 +1,13 @@
+EQxEar
+Copyright 2026 Jerod Dunn and EQxEar contributors
+
+EQxEar's original source and documentation are licensed under Apache-2.0.
+Third-party components retain their own licenses; see THIRD_PARTY.md.
+
+The filter coefficient implementation follows the equations published by
+Robert Bristow-Johnson in the Audio EQ Cookbook.
+
+EQxEar was inspired by DMS's original YouTube video and EQ by Ear utility.
+Credit goes to DMS for the idea that started this project.
+Video: https://youtu.be/WIWHINQ5lV8
+Utility: https://eqbyear.com/

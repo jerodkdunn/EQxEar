@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Install the desktop entry for this checkout without invoking a shell."""
+import os
+from pathlib import Path
+
+
+def desktop_argument(value):
+    # Exec quoting is decoded after desktop-entry string escaping.
+    quoted = '"' + ''.join('\\' + c if c in '\\"`$' else c for c in value).replace('%', '%%') + '"'
+    return quoted.replace('\\', '\\\\').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+
+
+def install():
+    root = Path(__file__).resolve().parent
+    path = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'applications/com.eqxear.App.desktop'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # A fixed executable also permits checkout names containing '='. The
+    # desktop specification prohibits '=' in the executable path itself.
+    entry = f'''[Desktop Entry]
+Type=Application
+Name=EQxEar
+Comment=Live native PipeWire system equalizer
+Exec=python3 {desktop_argument(str(root / 'run'))}
+Icon=audio-card
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+StartupWMClass=com.eqxear.App
+'''
+    path.write_text(entry, encoding='utf-8')
+    path.with_name('com.eqxear.V2.desktop').unlink(missing_ok=True)
+    print(path)
+
+
+if __name__ == '__main__':
+    install()
