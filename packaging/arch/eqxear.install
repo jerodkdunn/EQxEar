@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+post_upgrade() {
+  printf '%s\n' 'EQxEar: quit the background service and reopen the app to load this update.'
+  printf '%s\n' 'An already-running audio session is left running; your presets are preserved.'
+}
+
+pre_remove() {
+  printf '%s\n' 'EQxEar: quit the background service in the app before removing it.'
+  printf '%s\n' 'A running session remains active until you quit it or log out. Your presets are preserved.'
+}

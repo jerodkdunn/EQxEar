@@ -5,11 +5,11 @@ import json
 from pathlib import Path
 import socket
 import subprocess
-import sys
 import time
 from .service import runtime
 from .routing import outputs
 from .tone import Tone
+from .bootstrap import module_command
 
 REQUEST_TIMEOUT = 5.0
 START_TIMEOUT = 20.0
@@ -75,7 +75,7 @@ class Engine:
                 raise
             root = Path(__file__).resolve().parents[1]
             with (runtime()/'service.log').open('a') as log:
-                subprocess.Popen([sys.executable, '-m', 'eqxear.service'], cwd=root,
+                subprocess.Popen(module_command('service'), cwd=root,
                                  stdout=log, stderr=log, start_new_session=True)
             while True:
                 if time.monotonic() >= deadline:

@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from eqxear import __version__
 
 import gi
 gi.require_version('Gio', '2.0')
@@ -29,7 +30,7 @@ class LauncherTests(unittest.TestCase):
                 with self.subTest(flag=flag):
                     result = subprocess.run([str(ROOT/'run'), flag], cwd=base, env=env,
                                             capture_output=True, text=True, timeout=5, check=True)
-                    self.assertEqual(result.stdout, 'EQxEar 0.1.0\n')
+                    self.assertEqual(result.stdout, f'EQxEar {__version__}\n')
                     self.assertEqual(result.stderr, '')
             for directory in ('runtime', 'cache', 'data'):
                 self.assertFalse((base/directory).exists())

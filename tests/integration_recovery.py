@@ -16,6 +16,7 @@ from isolated_audio import session
 from eqxear.engine import Engine
 from eqxear.model import Profile, Band
 from eqxear.routing import Graph, SINK, command, pulse_list
+from eqxear.bootstrap import module_command
 
 
 def eventually(fn, timeout=6):
@@ -40,7 +41,8 @@ def session_service(root):
         try:
             args = (path/'cmdline').read_bytes().split(b'\0')
             env = (path/'environ').read_bytes().split(b'\0')
-            if b'eqxear.service' in args and ('XDG_RUNTIME_DIR='+str(root/'run')).encode() in env:
+            expected = [os.fsencode(part) for part in module_command('service')[1:]]
+            if args[1:-1] == expected and ('XDG_RUNTIME_DIR='+str(root/'run')).encode() in env:
                 matches.append(int(path.name))
         except (OSError, PermissionError):
             pass

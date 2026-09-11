@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Compile and stage a system installation without touching user data or caches."""
 import argparse
+import compileall
 import os
 from pathlib import Path
+import py_compile
 import shlex
 import shutil
 import subprocess
@@ -68,6 +70,10 @@ def install(build_dir, prefix, destdir):
     copy(ROOT / 'run', package / 'run', 0o755)
     for source in sorted((ROOT / 'eqxear').rglob('*.py')):
         copy(source, package / source.relative_to(ROOT))
+    if not compileall.compile_dir(str(package / 'eqxear'), quiet=1,
+                                 stripdir=str(package), prependdir=str(prefix / 'lib/eqxear'),
+                                 invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH):
+        raise RuntimeError('Could not compile installed Python modules')
     for relative in required:
         copy(native / relative, package / 'native' / relative, 0o755 if relative.endswith('.so') else 0o644)
     write(package / 'PACKAGED', 'EQxEar system package; native binaries are precompiled.\n')

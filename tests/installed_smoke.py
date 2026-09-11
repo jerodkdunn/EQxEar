@@ -7,6 +7,7 @@ source test adds the checkout to sys.path. Child services also use that path.
 """
 import argparse
 import importlib
+import importlib.util
 import os
 from pathlib import Path
 import runpy
@@ -19,13 +20,15 @@ from unittest.mock import patch
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--prefix', type=Path, default=Path('/usr'))
-    parser.add_argument('--test', choices=('ui_smoke.py', 'integration_v2.py', 'integration_spectrum.py'))
+    parser.add_argument('--test', choices=('ui_smoke.py', 'integration_v2.py', 'integration_spectrum.py', 'integration_recovery.py', 'integration_rate.py'))
     args = parser.parse_args()
     prefix = args.prefix.resolve()
     application = prefix / 'lib/eqxear'
     test_directory = Path(__file__).resolve().parent
     assert (application / 'PACKAGED').is_file()
     assert not list(application.rglob('*.c')), 'Native source must not be installed'
+    for source in (application / 'eqxear').glob('*.py'):
+        assert Path(importlib.util.cache_from_source(str(source))).is_file(), source
     sys.path.insert(0, str(application))
     eqxear = importlib.import_module('eqxear')
     assert Path(eqxear.__file__).resolve().is_relative_to(application)

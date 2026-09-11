@@ -23,12 +23,13 @@ def version():
 def release_files():
     names = {'Makefile', 'run', 'install-launcher', 'README.md', 'CONTRIBUTING.md',
              'LICENSE', 'NOTICE', 'THIRD_PARTY.md', 'docs/arch-packaging.md',
-             'docs/packaging-plan.md', 'docs/releases/0.1.0.md',
+             'docs/packaging-plan.md',
              'tools/build.py', 'tools/dist.py'}
     for directory, patterns in (
         ('eqxear', ('*.py',)), ('native', ('*.c',)), ('data', ('*.svg', '*.desktop')),
         ('LICENSES', ('*.txt',)), ('tests', ('*.py',)),
         ('tests/fixtures', ('*.json', '*.txt', '*.md')),
+        ('docs/releases', ('*.md',)),
     ):
         for pattern in patterns:
             names.update(str(p.relative_to(ROOT)) for p in (ROOT / directory).rglob(pattern))

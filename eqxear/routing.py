@@ -8,9 +8,9 @@ import re
 from pathlib import Path
 import subprocess
 import time
-import sys
 import uuid
 from .build import build_plugin, URI
+from .bootstrap import module_command
 
 SINK = 'eqxear_v2'
 # EasyEffects excludes output_level nodes from automatic stream capture.
@@ -128,8 +128,8 @@ class Graph:
         self.rate_pending = b''
         self.sample_rate = None
         try:
-            self.process = subprocess.Popen([sys.executable, '-m', 'eqxear.child', str(os.getpid()),
-                                             'pipewire','-c',str(path)], cwd=Path(__file__).resolve().parents[1],
+            self.process = subprocess.Popen(module_command('child', os.getpid(), 'pipewire', '-c', path),
+                                            cwd=Path(__file__).resolve().parents[1],
                                             env=env, stdout=self.log, stderr=self.log)
         except Exception:
             self.log.close(); self.log = None

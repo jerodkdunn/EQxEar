@@ -19,7 +19,7 @@ jobs:
           pacman -Syu --noconfirm --needed
           git python python-gobject python-cairo gtk4 lv2
           pipewire pipewire-audio pipewire-pulse wireplumber libpulse
-          dbus xorg-server-xvfb xorg-xauth desktop-file-utils
+          dbus xorg-server-xvfb xorg-xauth desktop-file-utils namcap
       - uses: actions/checkout@v4
       - name: Record tested stack
         run: |
@@ -48,21 +48,41 @@ jobs:
           import shutil
           destination = Path('/tmp/eqxear-package')
           destination.mkdir()
-          archive = next(Path('dist').glob('eqxear-*.tar.gz'))
+          from tools.dist import version
+          archive = Path('dist') / f'eqxear-{version()}.tar.gz'
           shutil.copy2(archive, destination / archive.name)
           recipe = Path('packaging/arch/PKGBUILD').read_text()
           recipe = re.sub(r'^source=.*$', f"source=('{archive.name}')", recipe, flags=re.M)
           digest = hashlib.sha256(archive.read_bytes()).hexdigest()
           recipe = re.sub(r'^sha256sums=.*$', f"sha256sums=('{digest}')", recipe, flags=re.M)
           (destination / 'PKGBUILD').write_text(recipe)
+          shutil.copy2('packaging/arch/eqxear.install', destination / 'eqxear.install')
           PY
           useradd -m builder
           mkdir /tmp/eqxear-metadata
           cp packaging/arch/PKGBUILD /tmp/eqxear-metadata/PKGBUILD
+          cp packaging/arch/eqxear.install /tmp/eqxear-metadata/eqxear.install
           chown -R builder:builder /tmp/eqxear-package /tmp/eqxear-metadata
           runuser -u builder -- sh -c 'cd /tmp/eqxear-metadata && makepkg --printsrcinfo' > /tmp/eqxear.SRCINFO
           diff -u packaging/arch/.SRCINFO /tmp/eqxear.SRCINFO
           runuser -u builder -- sh -c 'cd /tmp/eqxear-package && makepkg --noconfirm'
+      - name: Lint Arch recipe and package
+        run: |
+          namcap packaging/arch/PKGBUILD /tmp/eqxear-package/eqxear-[0-9]*.pkg.tar.zst > /tmp/eqxear-namcap.log
+          cat /tmp/eqxear-namcap.log
+          if grep -q ' E: ' /tmp/eqxear-namcap.log; then exit 1; fi
+      - name: Build published baseline for upgrade testing
+        run: |
+          # This pinned 0.1.0 fixture intentionally stays fixed across releases.
+          mkdir /tmp/eqxear-baseline
+          curl -fsSL https://raw.githubusercontent.com/jerodkdunn/EQxEar/c370cd82ddd6d8121eca8e119ce00a6db01f1035/packaging/arch/PKGBUILD -o /tmp/eqxear-baseline/PKGBUILD
+          chown -R builder:builder /tmp/eqxear-baseline
+          runuser -u builder -- sh -c 'cd /tmp/eqxear-baseline && makepkg --nocheck --noconfirm'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-baseline
+          path: /tmp/eqxear-baseline/eqxear-[0-9]*.pkg.tar.zst
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: arch-package
@@ -76,6 +96,7 @@ jobs:
     env:
       GSK_RENDERER: cairo
       GTK_A11Y: none
+      PYTHONSAFEPATH: '1'
     steps:
       - name: Install runtime and test dependencies
         run: >-
@@ -88,6 +109,10 @@ jobs:
         with:
           name: arch-package
           path: /tmp/eqxear-package
+      - uses: actions/download-artifact@v4
+        with:
+          name: arch-baseline
+          path: /tmp/eqxear-baseline
       - name: Install package without a compiler
         run: |
           # Arch's minimal image excludes documentation by default. Install all
@@ -103,6 +128,8 @@ jobs:
         run: runuser -u listener -- dbus-run-session -- python3 tests/installed_smoke.py --test integration_v2.py
       - name: Installed spectrum capture and FFT
         run: runuser -u listener -- dbus-run-session -- python3 tests/installed_smoke.py --test integration_spectrum.py
+      - name: Installed service and child recovery in safe-path mode
+        run: runuser -u listener -- dbus-run-session -- python3 tests/installed_smoke.py --test integration_recovery.py
       - name: Package removal preserves user data
         run: |
           runuser -u listener -- sh -c 'mkdir -p "$HOME/.local/share/eqxear-v2"; echo keep-me > "$HOME/.local/share/eqxear-v2/presets.json"'
@@ -112,3 +139,7 @@ jobs:
           test ! -e /usr/share/applications/com.eqxear.App.desktop
           test ! -e /usr/share/icons/hicolor/scalable/apps/com.eqxear.App.svg
           test "$(cat /home/listener/.local/share/eqxear-v2/presets.json)" = keep-me
+      - name: Upgrade and remove during isolated playback
+        run: |
+          printf 'Disposable packaging test root\n' > /etc/eqxear-package-test-container
+          dbus-run-session -- python3 tests/package_transactions.py --previous /tmp/eqxear-baseline/eqxear-0.1.0-1-x86_64.pkg.tar.zst --package "$(find /tmp/eqxear-package -name 'eqxear-[0-9]*.pkg.tar.zst')"
