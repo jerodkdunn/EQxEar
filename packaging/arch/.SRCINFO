@@ -1,0 +1,25 @@
+pkgbase = eqxear
+	pkgdesc = Live system parametric equalizer and spectrum analyzer for PipeWire
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/jerodkdunn/EQxEar
+	arch = x86_64
+	license = Apache-2.0
+	license = ISC
+	makedepends = gcc
+	makedepends = make
+	makedepends = lv2
+	depends = python>=3.11
+	depends = python-gobject
+	depends = python-cairo
+	depends = gtk4
+	depends = pipewire
+	depends = pipewire-audio
+	depends = pipewire-pulse
+	depends = wireplumber
+	depends = libpulse
+	depends = glibc
+	source = https://github.com/jerodkdunn/EQxEar/releases/download/v0.1.0/eqxear-0.1.0.tar.gz
+	sha256sums = bd60cbcd7d517be03f67c8c65af1770658f59313f7854e041b63354de1fca34a
+
+pkgname = eqxear

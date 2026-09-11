@@ -4,7 +4,11 @@ A live system equalizer for Omarchy, with its own native PipeWire DSP. Play musi
 
 EQxEar was inspired by DMS's [original YouTube video](https://youtu.be/WIWHINQ5lV8) and [EQ by Ear utility](https://eqbyear.com/), whose [source is now available on GitHub](https://github.com/DMS3tv/eqbyear). Credit goes to DMS for the idea that started this project. EQxEar continues that idea as a desktop application with live system-wide EQ, saved presets, and controls for tuning while listening. Thank you, DMS, for sharing it.
 
-## Run
+## Install on Arch Linux or Omarchy
+
+The `eqxear` package installs an `eqxear` command, a desktop launcher and precompiled audio libraries. See [Arch package instructions](docs/arch-packaging.md) to build, install, update or remove it. The initial release targets x86_64. The package recipe is in this repository; it has not been submitted to the AUR.
+
+## Run a development checkout
 
 Clone the source:
 
@@ -51,7 +55,7 @@ The engine currently processes stereo desktop playback. Applications using direc
 
 EQxEar retains its existing data directory at `$XDG_DATA_HOME/eqxear-v2`, normally `~/.local/share/eqxear-v2`, so existing presets and layouts remain available after the rename. On first launch, a valid v1 preset library and draft are copied into the new library if available. Subsequent edits do not modify v1 data. Presets and drafts use atomic file replacement.
 
-The background service uses a private socket under `$XDG_RUNTIME_DIR/eqxear-v2`. Its audio configuration and diagnostic logs are there too. The native plugin is built under `$XDG_CACHE_HOME/eqxear-v2`, normally `~/.cache/eqxear-v2`. No PipeWire, Hyprland, or Omarchy system configuration is edited. The UI follows the active Omarchy theme.
+The background service uses a private socket under `$XDG_RUNTIME_DIR/eqxear-v2`. Its audio configuration and diagnostic logs are there too. Development checkouts build native libraries under `$XDG_CACHE_HOME/eqxear-v2`, normally `~/.cache/eqxear-v2`. The installed package uses its precompiled libraries under `/usr/lib/eqxear/native`. No PipeWire, Hyprland, or Omarchy system configuration is edited. The UI follows the active Omarchy theme.
 
 ## Audio engine
 
@@ -78,14 +82,12 @@ The integration test starts separate PipeWire, Pulse, and WirePlumber processes 
 
 The recovery integration test checks service death, audio-graph loss and restart behavior in the same isolated environment. The sample-rate integration test measures normalized audio at 96 kHz and verifies live changes to 48, 44.1 and 32 kHz. Original response and preset-exchange fixtures are documented in [tests/fixtures/README.md](tests/fixtures/README.md).
 
+CI also builds an Arch package, installs it in a separate container without a compiler, and runs GTK, system audio and spectrum tests against the installed modules from outside the checkout. Removal checks confirm that package files disappear while user presets remain. See [the packaging plan](docs/packaging-plan.md) for distribution follow-ups.
+
 ## References
 
 EQxEar is an independent implementation and is not affiliated with or endorsed by DMS. The native engine uses standard RBJ biquad equations and PipeWire's documented [filter-chain module](https://docs.pipewire.org/page_module_filter_chain.html).
 
 ## License and contributions
 
-EQxEar is licensed under [Apache-2.0](LICENSE). See [NOTICE](NOTICE),
-[dependency and attribution details](THIRD_PARTY.md), and
-[contribution guidelines](CONTRIBUTING.md). The license permits use, modification
-and commercial distribution subject to its terms. A macOS version is a possible
-future project; the current audio backend is Linux-only.
+EQxEar is licensed under [Apache-2.0](LICENSE). See [NOTICE](NOTICE), [dependency and attribution details](THIRD_PARTY.md), and [contribution guidelines](CONTRIBUTING.md). The license permits use, modification and commercial distribution subject to its terms. A macOS version is a possible future project; the current audio backend is Linux-only.

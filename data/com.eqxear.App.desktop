@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+[Desktop Entry]
+Type=Application
+Name=EQxEar
+GenericName=Parametric Equalizer
+Comment=Adjust system audio with a live parametric equalizer
+Exec=eqxear
+Icon=com.eqxear.App
+Terminal=false
+StartupNotify=true
+StartupWMClass=com.eqxear.App
+Categories=AudioVideo;Audio;Mixer;GTK;
+Keywords=EQ;equalizer;audio;PipeWire;

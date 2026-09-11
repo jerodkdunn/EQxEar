@@ -9,6 +9,10 @@ import sys
 if sys.version_info < (3, 11):
     raise SystemExit('EQxEar requires Python 3.11 or newer.')
 root = Path(__file__).resolve().parent
-os.chdir(root)
 sys.path.insert(0, str(root))
+if len(sys.argv) == 2 and sys.argv[1] in ('--version', '-V'):
+    from eqxear import __version__
+    print(f'EQxEar {__version__}')
+    raise SystemExit(0)
+os.chdir(root)
 runpy.run_module('eqxear', run_name='__main__', alter_sys=True)

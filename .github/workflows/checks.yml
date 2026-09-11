@@ -38,3 +38,73 @@ jobs:
         run: dbus-run-session -- python3 tests/integration_recovery.py
       - name: Isolated DSP sample-rate and normalization checks
         run: dbus-run-session -- python3 tests/integration_rate.py
+      - name: Build current source as an Arch package
+        run: |
+          python3 tools/dist.py
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          import re
+          import shutil
+          destination = Path('/tmp/eqxear-package')
+          destination.mkdir()
+          archive = next(Path('dist').glob('eqxear-*.tar.gz'))
+          shutil.copy2(archive, destination / archive.name)
+          recipe = Path('packaging/arch/PKGBUILD').read_text()
+          recipe = re.sub(r'^source=.*$', f"source=('{archive.name}')", recipe, flags=re.M)
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          recipe = re.sub(r'^sha256sums=.*$', f"sha256sums=('{digest}')", recipe, flags=re.M)
+          (destination / 'PKGBUILD').write_text(recipe)
+          PY
+          useradd -m builder
+          runuser -u builder -- sh -c 'cd "$1/packaging/arch" && makepkg --printsrcinfo' sh "$GITHUB_WORKSPACE" > /tmp/eqxear.SRCINFO
+          diff -u packaging/arch/.SRCINFO /tmp/eqxear.SRCINFO
+          chown -R builder:builder /tmp/eqxear-package
+          runuser -u builder -- sh -c 'cd /tmp/eqxear-package && makepkg --noconfirm'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: /tmp/eqxear-package/eqxear-[0-9]*.pkg.tar.zst
+          if-no-files-found: error
+  installed-package:
+    needs: linux
+    runs-on: ubuntu-24.04
+    container: archlinux:base
+    timeout-minutes: 10
+    env:
+      GSK_RENDERER: cairo
+      GTK_A11Y: none
+    steps:
+      - name: Install runtime and test dependencies
+        run: >-
+          pacman -Syu --noconfirm --needed
+          git python python-gobject python-cairo gtk4
+          pipewire pipewire-audio pipewire-pulse wireplumber libpulse
+          dbus xorg-server-xvfb xorg-xauth desktop-file-utils
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: arch-package
+          path: /tmp/eqxear-package
+      - name: Install package without a compiler
+        run: |
+          pacman -U --noconfirm /tmp/eqxear-package/*.pkg.tar.zst
+          ! command -v cc
+          ! command -v gcc
+          useradd -m listener
+          pacman -Qkk eqxear
+      - name: Installed command, desktop and GTK interactions
+        run: runuser -u listener -- xvfb-run -a dbus-run-session -- python3 tests/installed_smoke.py --test ui_smoke.py
+      - name: Installed system audio and background service
+        run: runuser -u listener -- dbus-run-session -- python3 tests/installed_smoke.py --test integration_v2.py
+      - name: Installed spectrum capture and FFT
+        run: runuser -u listener -- dbus-run-session -- python3 tests/installed_smoke.py --test integration_spectrum.py
+      - name: Package removal preserves user data
+        run: |
+          runuser -u listener -- sh -c 'mkdir -p "$HOME/.local/share/eqxear-v2"; echo keep-me > "$HOME/.local/share/eqxear-v2/presets.json"'
+          pacman -R --noconfirm eqxear
+          test ! -e /usr/bin/eqxear
+          test ! -e /usr/lib/eqxear
+          test ! -e /usr/share/applications/com.eqxear.App.desktop
+          test ! -e /usr/share/icons/hicolor/scalable/apps/com.eqxear.App.svg
+          test "$(cat /home/listener/.local/share/eqxear-v2/presets.json)" = keep-me

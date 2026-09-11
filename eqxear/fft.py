@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Cached native FFT build and an owned real-to-complex transform."""
+"""Installed or cached native FFT and an owned real-to-complex transform."""
 import ctypes as C
 import hashlib
 import os
@@ -8,11 +8,17 @@ import subprocess
 import tempfile
 import threading
 
+from .build import has_prebuilt
+
+ROOT = Path(__file__).resolve().parents[1]
 _BUILD_LOCK = threading.Lock()
 
 
 def build_fft():
-    source = Path(__file__).resolve().parents[1]/'native/fft.c'
+    installed = Path('native/libeqxear_fft.so')
+    if has_prebuilt(ROOT, [installed]):
+        return ROOT/installed
+    source = ROOT/'native/fft.c'
     digest = hashlib.sha256(source.read_bytes()).hexdigest()[:16]
     cache = Path(os.environ.get('XDG_CACHE_HOME', Path.home()/'.cache'))/'eqxear-v2/fft'
     cache.mkdir(parents=True, exist_ok=True)

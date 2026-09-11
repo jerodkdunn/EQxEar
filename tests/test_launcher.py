@@ -17,6 +17,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class LauncherTests(unittest.TestCase):
+    def test_version_does_not_import_gui_or_start_audio(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            # A GUI import would fail, independent of the machine's display.
+            (base / 'gi.py').write_text("raise RuntimeError('Version must not import GTK')\n")
+            env = dict(os.environ, PYTHONPATH=str(base), DISPLAY='', WAYLAND_DISPLAY='',
+                       XDG_RUNTIME_DIR=str(base/'runtime'), XDG_CACHE_HOME=str(base/'cache'),
+                       XDG_DATA_HOME=str(base/'data'))
+            for flag in ('--version', '-V'):
+                with self.subTest(flag=flag):
+                    result = subprocess.run([str(ROOT/'run'), flag], cwd=base, env=env,
+                                            capture_output=True, text=True, timeout=5, check=True)
+                    self.assertEqual(result.stdout, 'EQxEar 0.1.0\n')
+                    self.assertEqual(result.stderr, '')
+            for directory in ('runtime', 'cache', 'data'):
+                self.assertFalse((base/directory).exists())
+
     def test_desktop_launch_round_trips_checkout_paths(self):
         names = ['ordinary', 'space and 雪', 'quote" apostrophe\' backslash\\ dollar$ tick` percent% field%f equals=', 'tab\tand newline\n']
         for name in names:

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Build the small native DSP plugin into an XDG cache, never system folders."""
+"""Use installed DSP artifacts, or build a development copy in an XDG cache."""
 import errno
 import hashlib
 import os
@@ -11,7 +11,21 @@ import tempfile
 URI = 'urn:eqxear:v2:eq'
 ROOT = Path(__file__).resolve().parents[1]
 
+def has_prebuilt(root, relative_paths):
+    """Packaged installs never compile, including when an install is damaged."""
+    missing = [str(path) for path in relative_paths if not (root/path).is_file()]
+    if not missing:
+        return True
+    if (root/'PACKAGED').exists():
+        raise RuntimeError('EQxEar installation is incomplete: missing '+', '.join(missing)+
+                           '. Reinstall the EQxEar package to restore its native components.')
+    return False
+
+
 def build_plugin():
+    bundle = Path('native/lv2/eqxear.lv2')
+    if has_prebuilt(ROOT, [bundle/name for name in ('eq.so','eq.ttl','manifest.ttl')]):
+        return ROOT/bundle.parent
     source = (ROOT/'native/eq.c').read_bytes()
     # Include the build recipe and metadata as well as source in the identity.
     digest = hashlib.sha256(source + Path(__file__).read_bytes()).hexdigest()

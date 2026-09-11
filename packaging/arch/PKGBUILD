@@ -1,0 +1,28 @@
+# Maintainer: Jerod Dunn (jerodkdunn on GitHub)
+# SPDX-License-Identifier: Apache-2.0
+pkgname=eqxear
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Live system parametric equalizer and spectrum analyzer for PipeWire'
+arch=('x86_64')
+url='https://github.com/jerodkdunn/EQxEar'
+license=('Apache-2.0' 'ISC')
+depends=('python>=3.11' 'python-gobject' 'python-cairo' 'gtk4' 'pipewire' 'pipewire-audio' 'pipewire-pulse' 'wireplumber' 'libpulse' 'glibc')
+makedepends=('gcc' 'make' 'lv2')
+source=("$url/releases/download/v$pkgver/eqxear-$pkgver.tar.gz")
+sha256sums=('bd60cbcd7d517be03f67c8c65af1770658f59313f7854e041b63354de1fca34a')
+
+build() {
+  cd "$srcdir/eqxear-$pkgver"
+  make
+}
+
+check() {
+  cd "$srcdir/eqxear-$pkgver"
+  XDG_CACHE_HOME="$srcdir/check-cache" python3 -m unittest discover -s tests -v
+}
+
+package() {
+  cd "$srcdir/eqxear-$pkgver"
+  make DESTDIR="$pkgdir" PREFIX=/usr install
+}
